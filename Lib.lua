@@ -1,4 +1,5 @@
--- thank flu4er for lib.lua (this on russia)
+-- ExecutorUILibrary.lua
+-- Исправленная библиотека UI для Roblox исполнителей
 
 local ExecutorUILibrary = {}
 ExecutorUILibrary.__index = ExecutorUILibrary
@@ -6,7 +7,7 @@ ExecutorUILibrary.__index = ExecutorUILibrary
 -- Конфигурация
 local CONFIG = {
     DEFAULT_THEME = "Dark",
-    SOUNDS_ENABLED = true,
+    SOUNDS_ENABLED = false, -- Отключаем звуки, так как SoundId требует правильных ID
     ANIMATIONS_ENABLED = true
 }
 
@@ -44,7 +45,10 @@ local function createRoundedFrame(parent, size, position)
     UICorner.CornerRadius = UDim.new(0, 8)
     UICorner.Parent = frame
     
-    frame.Parent = parent
+    if parent then
+        frame.Parent = parent
+    end
+    
     return frame
 end
 
@@ -59,7 +63,10 @@ local function createTextLabel(parent, text, size, position)
     label.Font = Enum.Font.Gotham
     label.TextXAlignment = Enum.TextXAlignment.Left
     
-    label.Parent = parent
+    if parent then
+        label.Parent = parent
+    end
+    
     return label
 end
 
@@ -70,7 +77,13 @@ function ExecutorUILibrary.new(parentScreenGui)
     self._screenGui = parentScreenGui or Instance.new("ScreenGui")
     if not parentScreenGui then
         self._screenGui.Name = "ExecutorUILibrary"
-        self._screenGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+        local player = game:GetService("Players").LocalPlayer
+        if player then
+            local playerGui = player:WaitForChild("PlayerGui")
+            self._screenGui.Parent = playerGui
+        else
+            self._screenGui.Parent = game:GetService("StarterGui")
+        end
     end
     
     self._elements = {}
@@ -84,6 +97,8 @@ end
 
 -- Создание кнопки
 function ExecutorUILibrary:CreateButton(config)
+    config = config or {}
+    
     local buttonFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 120, 0, 40), config.Position or UDim2.new(0, 20, 0, 20))
     
     local buttonText = Instance.new("TextButton")
@@ -96,25 +111,25 @@ function ExecutorUILibrary:CreateButton(config)
     buttonText.Parent = buttonFrame
     
     -- Анимация наведения
-    buttonText.MouseEnter:Connect(function()
-        if CONFIG.ANIMATIONS_ENABLED then
+    if CONFIG.ANIMATIONS_ENABLED then
+        buttonText.MouseEnter:Connect(function()
+            local theme = self._themes[self._currentTheme]
+            local darkerColor = Color3.fromRGB(
+                math.floor(theme.Primary.R * 255 * 0.8),
+                math.floor(theme.Primary.G * 255 * 0.8),
+                math.floor(theme.Primary.B * 255 * 0.8)
+            )
             game:GetService("TweenService"):Create(buttonFrame, TweenInfo.new(0.2), {
-                BackgroundColor3 = Color3.fromRGB(
-                    math.floor(self._themes[self._currentTheme].Primary.R * 255 * 0.8),
-                    math.floor(self._themes[self._currentTheme].Primary.G * 255 * 0.8),
-                    math.floor(self._themes[self._currentTheme].Primary.B * 255 * 0.8)
-                )
+                BackgroundColor3 = darkerColor
             }):Play()
-        end
-    end)
-    
-    buttonText.MouseLeave:Connect(function()
-        if CONFIG.ANIMATIONS_ENABLED then
+        end)
+        
+        buttonText.MouseLeave:Connect(function()
             game:GetService("TweenService"):Create(buttonFrame, TweenInfo.new(0.2), {
                 BackgroundColor3 = self._themes[self._currentTheme].Primary
             }):Play()
-        end
-    end)
+        end)
+    end
     
     buttonFrame.BackgroundColor3 = self._themes[self._currentTheme].Primary
     
@@ -125,28 +140,26 @@ function ExecutorUILibrary:CreateButton(config)
     }
     
     buttonText.MouseButton1Click:Connect(function()
-        if CONFIG.SOUNDS_ENABLED then
-            local sound = Instance.new("Sound")
-            sound.SoundId = "rbxassetid://357429578"
-            sound.Volume = 0.3
-            sound.Parent = buttonFrame
-            sound:Play()
-            game.Debris:AddItem(sound, 1)
-        end
-        
         button.Click:Fire()
         
         if config.OnClick then
-            pcall(config.OnClick)
+            local success, err = pcall(config.OnClick)
+            if not success then
+                warn("[Button] Ошибка в обработчике OnClick:", err)
+            end
         end
     end)
     
-    self._elements[config.Name or "Button_" .. #self._elements + 1] = button
+    local elementName = config.Name or "Button_" .. tostring(#self._elements + 1)
+    self._elements[elementName] = button
+    
     return button
 end
 
 -- Создание переключателя
 function ExecutorUILibrary:CreateToggle(config)
+    config = config or {}
+    
     local toggleFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 200, 0, 40), config.Position or UDim2.new(0, 20, 0, 80))
     
     local toggleText = createTextLabel(toggleFrame, config.Text or "Toggle", UDim2.new(0.7, 0, 1, 0), UDim2.new(0, 10, 0, 0))
@@ -196,17 +209,11 @@ function ExecutorUILibrary:CreateToggle(config)
         state = not state
         updateToggle()
         
-        if CONFIG.SOUNDS_ENABLED then
-            local sound = Instance.new("Sound")
-            sound.SoundId = "rbxassetid://138080526"
-            sound.Volume = 0.2
-            sound.Parent = toggleFrame
-            sound:Play()
-            game.Debris:AddItem(sound, 1)
-        end
-        
         if config.OnToggle then
-            pcall(config.OnToggle, state)
+            local success, err = pcall(config.OnToggle, state)
+            if not success then
+                warn("[Toggle] Ошибка в обработчике OnToggle:", err)
+            end
         end
     end)
     
@@ -220,12 +227,16 @@ function ExecutorUILibrary:CreateToggle(config)
         end
     }
     
-    self._elements[config.Name or "Toggle_" .. #self._elements + 1] = toggle
+    local elementName = config.Name or "Toggle_" .. tostring(#self._elements + 1)
+    self._elements[elementName] = toggle
+    
     return toggle
 end
 
 -- Создание слайдера
 function ExecutorUILibrary:CreateSlider(config)
+    config = config or {}
+    
     local sliderFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 250, 0, 60), config.Position or UDim2.new(0, 20, 0, 140))
     
     local sliderText = createTextLabel(sliderFrame, config.Text or "Slider: 50%", UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 5))
@@ -256,8 +267,15 @@ function ExecutorUILibrary:CreateSlider(config)
     local value = config.Default or 50
     
     local function updateSlider(mouseX)
-        local relativeX = math.clamp(mouseX - sliderTrack.AbsolutePosition.X, 0, sliderTrack.AbsoluteSize.X)
-        local percentage = relativeX / sliderTrack.AbsoluteSize.X
+        if not sliderTrack then return end
+        
+        local absolutePosition = sliderTrack.AbsolutePosition
+        local absoluteSize = sliderTrack.AbsoluteSize
+        
+        if not absolutePosition or not absoluteSize then return end
+        
+        local relativeX = math.clamp(mouseX - absolutePosition.X, 0, absoluteSize.X)
+        local percentage = relativeX / absoluteSize.X
         
         value = math.floor(min + (max - min) * percentage)
         
@@ -265,7 +283,10 @@ function ExecutorUILibrary:CreateSlider(config)
         sliderText.Text = string.format("%s: %d/%d", config.Text or "Slider", value, max)
         
         if config.OnChange then
-            pcall(config.OnChange, value)
+            local success, err = pcall(config.OnChange, value)
+            if not success then
+                warn("[Slider] Ошибка в обработчике OnChange:", err)
+            end
         end
     end
     
@@ -308,17 +329,21 @@ function ExecutorUILibrary:CreateSlider(config)
         end
     }
     
-    self._elements[config.Name or "Slider_" .. #self._elements + 1] = slider
+    local elementName = config.Name or "Slider_" .. tostring(#self._elements + 1)
+    self._elements[elementName] = slider
+    
     return slider
 end
 
 -- Создание выпадающего списка
 function ExecutorUILibrary:CreateDropdown(config)
+    config = config or {}
+    
     local dropdownFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 200, 0, 40), config.Position or UDim2.new(0, 20, 0, 220))
     
     local dropdownButton = Instance.new("TextButton")
     dropdownButton.Size = UDim2.new(1, 0, 1, 0)
-    dropdownButton.Text = config.Default or (config.Options and config.Options[1]) or "Select..."
+    dropdownButton.Text = config.Default or "Select..."
     dropdownButton.TextColor3 = self._themes[self._currentTheme].Text
     dropdownButton.BackgroundTransparency = 1
     dropdownButton.TextSize = 14
@@ -340,17 +365,15 @@ function ExecutorUILibrary:CreateDropdown(config)
     optionsFrame.Position = UDim2.new(0, 0, 1, 5)
     optionsFrame.BackgroundColor3 = self._themes[self._currentTheme].Secondary
     optionsFrame.Visible = false
+    optionsFrame.ClipsDescendants = true
     
     local optionsCorner = Instance.new("UICorner")
     optionsCorner.CornerRadius = UDim.new(0, 8)
     optionsCorner.Parent = optionsFrame
     
-    local optionsList = Instance.new("UIListLayout")
-    optionsList.Parent = optionsFrame
-    
     optionsFrame.Parent = dropdownFrame
     
-    local selected = config.Default or (config.Options and config.Options[1])
+    local selected = config.Default or "Select..."
     local options = config.Options or {"Option 1", "Option 2", "Option 3"}
     
     local function updateOptions()
@@ -383,10 +406,12 @@ function ExecutorUILibrary:CreateDropdown(config)
                 selected = option
                 dropdownButton.Text = option
                 optionsFrame.Visible = false
-                optionsFrame.Size = UDim2.new(1, 0, 0, 0)
                 
                 if config.OnSelect then
-                    pcall(config.OnSelect, option)
+                    local success, err = pcall(config.OnSelect, option)
+                    if not success then
+                        warn("[Dropdown] Ошибка в обработчике OnSelect:", err)
+                    end
                 end
             end)
         end
@@ -398,29 +423,31 @@ function ExecutorUILibrary:CreateDropdown(config)
     
     dropdownButton.MouseButton1Click:Connect(function()
         optionsFrame.Visible = not optionsFrame.Visible
-        
-        if optionsFrame.Visible then
-            optionsFrame.Size = UDim2.new(1, 0, 0, #options * 30)
-        else
-            optionsFrame.Size = UDim2.new(1, 0, 0, 0)
-        end
     end)
     
     local dropdown = {
         _frame = dropdownFrame,
         GetSelected = function() return selected end,
         SetOptions = function(newOptions)
-            options = newOptions
-            updateOptions()
+            if type(newOptions) == "table" then
+                options = newOptions
+                updateOptions()
+            else
+                warn("[Dropdown] SetOptions ожидает таблицу")
+            end
         end
     }
     
-    self._elements[config.Name or "Dropdown_" .. #self._elements + 1] = dropdown
+    local elementName = config.Name or "Dropdown_" .. tostring(#self._elements + 1)
+    self._elements[elementName] = dropdown
+    
     return dropdown
 end
 
 -- Создание консоли для вывода
 function ExecutorUILibrary:CreateConsole(config)
+    config = config or {}
+    
     local consoleFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 400, 0, 300), config.Position or UDim2.new(0.5, -200, 0.5, -150))
     
     local consoleHeader = createTextLabel(consoleFrame, config.Title or "Console", UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 5))
@@ -454,13 +481,22 @@ function ExecutorUILibrary:CreateConsole(config)
     inputBox.Parent = inputFrame
     
     local function addMessage(message, messageType)
+        if not message then return end
+        
         local messageLabel = Instance.new("TextLabel")
         messageLabel.Size = UDim2.new(1, 0, 0, 20)
-        messageLabel.Text = "> " .. message
-        messageLabel.TextColor3 = messageType == "error" and self._themes[self._currentTheme].Error
-                               or messageType == "success" and self._themes[self._currentTheme].Success
-                               or messageType == "warning" and self._themes[self._currentTheme].Warning
-                               or self._themes[self._currentTheme].Text
+        messageLabel.Text = "> " .. tostring(message)
+        
+        if messageType == "error" then
+            messageLabel.TextColor3 = self._themes[self._currentTheme].Error
+        elseif messageType == "success" then
+            messageLabel.TextColor3 = self._themes[self._currentTheme].Success
+        elseif messageType == "warning" then
+            messageLabel.TextColor3 = self._themes[self._currentTheme].Warning
+        else
+            messageLabel.TextColor3 = self._themes[self._currentTheme].Text
+        end
+        
         messageLabel.BackgroundTransparency = 1
         messageLabel.TextSize = 12
         messageLabel.Font = Enum.Font.Gotham
@@ -471,7 +507,7 @@ function ExecutorUILibrary:CreateConsole(config)
         messageLabel.Parent = consoleOutput
         
         -- Автоскролл вниз
-        wait()
+        task.wait()
         consoleOutput.CanvasPosition = Vector2.new(0, consoleOutput.CanvasPosition.Y + 100)
     end
     
@@ -487,7 +523,7 @@ function ExecutorUILibrary:CreateConsole(config)
                 if success then
                     addMessage(result or "Command executed", "success")
                 else
-                    addMessage("Error: " .. result, "error")
+                    addMessage("Error: " .. tostring(result), "error")
                 end
             end
         end
@@ -505,12 +541,16 @@ function ExecutorUILibrary:CreateConsole(config)
         end
     }
     
-    self._elements[config.Name or "Console"] = console
+    local elementName = config.Name or "Console"
+    self._elements[elementName] = console
+    
     return console
 end
 
 -- Создание панели исполнителя
 function ExecutorUILibrary:CreateExecutorPanel(config)
+    config = config or {}
+    
     local panelFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 500, 0, 400), config.Position or UDim2.new(0.5, -250, 0.5, -200))
     
     local header = createTextLabel(panelFrame, config.Title or "Executor Panel", UDim2.new(1, -20, 0, 40), UDim2.new(0, 10, 0, 5))
@@ -603,10 +643,19 @@ function ExecutorUILibrary:CreateExecutorPanel(config)
         local script = scriptInput.Text
         outputText.Text = "Executing..."
         
-        -- Безопасное выполнение (в реальном исполнителе здесь будет loadstring или аналоги)
+        -- Безопасное выполнение
         local success, result = pcall(function()
-            -- В реальном скрипте здесь будет: return loadstring(script)()
-            return "Script executed (simulated)"
+            -- В реальном скрипте исполнителя здесь будет loadstring
+            -- Пример для Roblox:
+            -- local func, err = loadstring(script)
+            -- if func then
+            --     return func()
+            -- else
+            --     error(err)
+            -- end
+            
+            -- Для демонстрации просто возвращаем сообщение
+            return "Script executed (simulated mode)"
         end)
         
         if success then
@@ -627,11 +676,16 @@ function ExecutorUILibrary:CreateExecutorPanel(config)
         _frame = panelFrame,
         ExecuteScript = executeScript,
         GetScript = function() return scriptInput.Text end,
-        SetScript = function(script) scriptInput.Text = script end
+        SetScript = function(script) 
+            if type(script) == "string" then
+                scriptInput.Text = script 
+            end
+        end
     }
     
-    self._elements[config.Name or "ExecutorPanel"] = panel
-    self._executors[config.Name or "ExecutorPanel"] = panel
+    local elementName = config.Name or "ExecutorPanel"
+    self._elements[elementName] = panel
+    self._executors[elementName] = panel
     
     return panel
 end
@@ -642,19 +696,21 @@ function ExecutorUILibrary:SetTheme(themeName)
         self._currentTheme = themeName
         print("[ExecutorUILibrary] Тема изменена на: " .. themeName)
     else
-        warn("[ExecutorUILibrary] Тема не найдена: " .. themeName)
+        warn("[ExecutorUILibrary] Тема не найдена: " .. tostring(themeName))
     end
 end
 
 -- Показать/скрыть все элементы
 function ExecutorUILibrary:ToggleVisibility(visible)
-    self._screenGui.Enabled = visible
+    if self._screenGui then
+        self._screenGui.Enabled = visible
+    end
 end
 
 -- Очистить все элементы
 function ExecutorUILibrary:Clear()
     for _, element in pairs(self._elements) do
-        if element._frame then
+        if element and element._frame then
             element._frame:Destroy()
         end
     end
@@ -664,10 +720,20 @@ end
 
 -- Получить информацию о библиотеке
 function ExecutorUILibrary:GetInfo()
+    local elementsCount = 0
+    for _ in pairs(self._elements) do
+        elementsCount = elementsCount + 1
+    end
+    
+    local executorsCount = 0
+    for _ in pairs(self._executors) do
+        executorsCount = executorsCount + 1
+    end
+    
     return {
-        Version = "1.0.0",
-        ElementsCount = #self._elements,
-        ExecutorsCount = #self._executors,
+        Version = "1.1.0",
+        ElementsCount = elementsCount,
+        ExecutorsCount = executorsCount,
         CurrentTheme = self._currentTheme
     }
 end
