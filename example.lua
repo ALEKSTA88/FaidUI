@@ -1,85 +1,80 @@
--- Пример использования
-local ui = loadstring(game:HttpGet("https://raw.githubusercontent.com/ALEKSTA88/FaidUI/refs/heads/main/Lib.lua"))()
+-- Пример использования библиотеки
+local ExecutorUILibrary = loadstring(game:HttpGet('https://raw.githubusercontent.com/ALEKSTA88/FaidUI/refs/heads/main/Lib.lua'))() -- или loadstring, если загружаете удаленно
 
--- Создание кнопки
-local myButton = ui:CreateButton({
-    Name = "ExecuteBtn",
-    Text = "Execute Script",
+-- Создаем экземпляр библиотеки
+local ui = ExecutorUILibrary.new()
+
+-- Создаем кнопку
+local button = ui:CreateButton({
+    Name = "TestButton",
+    Text = "Click me!",
     Position = UDim2.new(0, 20, 0, 20),
-    Size = UDim2.new(0, 150, 0, 40),
     OnClick = function()
         print("Button clicked!")
-        -- Ваш код здесь
     end
 })
 
--- Создание переключателя
-local myToggle = ui:CreateToggle({
+-- Создаем переключатель
+local toggle = ui:CreateToggle({
     Name = "GodMode",
     Text = "God Mode",
-    Position = UDim2.new(0, 20, 0, 70),
+    Position = UDim2.new(0, 20, 0, 80),
     Default = false,
     OnToggle = function(state)
-        print("God Mode: " .. tostring(state))
-        -- Включение/выключение режима бога
+        print("God Mode:", state)
     end
 })
 
--- Создание слайдера
-local mySlider = ui:CreateSlider({
-    Name = "WalkSpeed",
-    Text = "Walk Speed",
-    Position = UDim2.new(0, 20, 0, 120),
+-- Создаем слайдер
+local slider = ui:CreateSlider({
+    Name = "Speed",
+    Text = "Speed",
+    Position = UDim2.new(0, 20, 0, 140),
     Min = 16,
     Max = 100,
     Default = 16,
     OnChange = function(value)
-        game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = value
+        print("Speed changed to:", value)
     end
 })
 
--- Создание выпадающего списка
-local myDropdown = ui:CreateDropdown({
-    Name = "Teleport",
-    Position = UDim2.new(0, 20, 0, 190),
-    Options = {"Spawn", "Baseplate", "Sky", "Secret Room"},
-    OnSelect = function(option)
-        print("Teleporting to: " .. option)
-        -- Телепортация
-    end
+-- Создаем панель исполнителя
+local executor = ui:CreateExecutorPanel({
+    Name = "MainExecutor",
+    Title = "Script Executor v1.0",
+    Position = UDim2.new(0.5, -250, 0.5, -200),
+    Size = UDim2.new(0, 500, 0, 400),
+    DefaultScript = "print('Hello from executor!')"
 })
 
--- Создание консоли
+-- Создаем консоль
 local console = ui:CreateConsole({
-    Name = "MainConsole",
-    Title = "Executor Console",
-    Position = UDim2.new(0.5, -200, 0, 20),
-    Size = UDim2.new(0, 400, 0, 300),
+    Name = "DebugConsole",
+    Title = "Debug Console",
+    Position = UDim2.new(0, 300, 0, 20),
+    Size = UDim2.new(0, 400, 0, 200),
     OnCommand = function(cmd)
         if cmd == "help" then
-            return "Available commands: help, clear, info"
+            return "Commands: help, clear, info, theme [dark/light]"
         elseif cmd == "clear" then
             console:Clear()
             return "Console cleared"
         elseif cmd == "info" then
-            return "Executor UI Library v1.0.0"
+            local info = ui:GetInfo()
+            return string.format("UI v%s, Elements: %d", info.Version, info.ElementsCount)
+        elseif cmd:sub(1,6) == "theme " then
+            local theme = cmd:sub(7)
+            ui:SetTheme(theme)
+            return "Theme set to: " .. theme
         else
-            return "Unknown command: " .. cmd
+            return "Executed: " .. cmd
         end
     end
 })
 
--- Создание панели исполнителя
-local executorPanel = ui:CreateExecutorPanel({
-    Name = "MainExecutor",
-    Title = "Script Executor",
-    Size = UDim2.new(0, 600, 0, 500),
-    DefaultScript = "print('Hello from executor!')"
-})
-
--- Изменение темы
-ui:SetTheme("Dark") -- или "Light"
-
--- Получение информации
+-- Выводим информацию о библиотеке
 local info = ui:GetInfo()
-print("UI Version: " .. info.Version)
+print("Executor UI Library loaded!")
+print("Version:", info.Version)
+print("Elements:", info.ElementsCount)
+print("Theme:", info.CurrentTheme)
