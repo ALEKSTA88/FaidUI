@@ -1,5 +1,5 @@
 -- Пример использования
-local ui = loadstring(game:HttpGet("123"))()
+local ui = loadstring(game:HttpGet("https://raw.githubusercontent.com/ALEKSTA88/FaidUI/refs/heads/main/Lib.lua"))()
 
 -- Создание кнопки
 local myButton = ui:CreateButton({
