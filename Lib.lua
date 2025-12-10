@@ -1,44 +1,48 @@
--- ExecutorUILibrary.lua
--- Исправленная библиотека UI для Roblox исполнителей
-
-local ExecutorUILibrary = {}
-ExecutorUILibrary.__index = ExecutorUILibrary
+local DragWindowUILibrary = {}
+DragWindowUILibrary.__index = DragWindowUILibrary
 
 -- Конфигурация
 local CONFIG = {
     DEFAULT_THEME = "Dark",
-    SOUNDS_ENABLED = false, -- Отключаем звуки, так как SoundId требует правильных ID
-    ANIMATIONS_ENABLED = true
+    ANIMATIONS_ENABLED = true,
+    WINDOW_HEADER_HEIGHT = 40,
+    ELEMENT_SPACING = 10
 }
 
 -- Текущая тема
 local currentTheme = {
     Dark = {
         Background = Color3.fromRGB(30, 30, 30),
+        WindowBackground = Color3.fromRGB(40, 40, 40),
+        Header = Color3.fromRGB(50, 50, 50),
         Primary = Color3.fromRGB(0, 120, 215),
         Secondary = Color3.fromRGB(60, 60, 60),
         Text = Color3.fromRGB(255, 255, 255),
         Success = Color3.fromRGB(0, 200, 0),
         Error = Color3.fromRGB(255, 50, 50),
-        Warning = Color3.fromRGB(255, 165, 0)
+        Warning = Color3.fromRGB(255, 165, 0),
+        CloseButton = Color3.fromRGB(255, 80, 80)
     },
     Light = {
         Background = Color3.fromRGB(240, 240, 240),
+        WindowBackground = Color3.fromRGB(255, 255, 255),
+        Header = Color3.fromRGB(220, 220, 220),
         Primary = Color3.fromRGB(0, 90, 180),
         Secondary = Color3.fromRGB(200, 200, 200),
         Text = Color3.fromRGB(0, 0, 0),
         Success = Color3.fromRGB(0, 150, 0),
         Error = Color3.fromRGB(200, 0, 0),
-        Warning = Color3.fromRGB(200, 120, 0)
+        Warning = Color3.fromRGB(200, 120, 0),
+        CloseButton = Color3.fromRGB(255, 100, 100)
     }
 }
 
 -- Служебные функции
-local function createRoundedFrame(parent, size, position)
+local function createRoundedFrame(parent, size, position, backgroundColor)
     local frame = Instance.new("Frame")
     frame.Size = size
     frame.Position = position
-    frame.BackgroundColor3 = currentTheme[CONFIG.DEFAULT_THEME].Secondary
+    frame.BackgroundColor3 = backgroundColor or currentTheme[CONFIG.DEFAULT_THEME].Secondary
     frame.BackgroundTransparency = 0
     
     local UICorner = Instance.new("UICorner")
@@ -52,16 +56,18 @@ local function createRoundedFrame(parent, size, position)
     return frame
 end
 
-local function createTextLabel(parent, text, size, position)
+local function createTextLabel(parent, text, size, position, options)
+    options = options or {}
     local label = Instance.new("TextLabel")
     label.Size = size
     label.Position = position
-    label.Text = text
-    label.TextColor3 = currentTheme[CONFIG.DEFAULT_THEME].Text
-    label.BackgroundTransparency = 1
-    label.TextSize = 14
-    label.Font = Enum.Font.Gotham
-    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Text = text or ""
+    label.TextColor3 = options.TextColor or currentTheme[CONFIG.DEFAULT_THEME].Text
+    label.BackgroundTransparency = options.BackgroundTransparency or 1
+    label.TextSize = options.TextSize or 14
+    label.Font = options.Font or Enum.Font.Gotham
+    label.TextXAlignment = options.TextXAlignment or Enum.TextXAlignment.Left
+    label.TextYAlignment = options.TextYAlignment or Enum.TextYAlignment.Center
     
     if parent then
         label.Parent = parent
@@ -71,35 +77,190 @@ local function createTextLabel(parent, text, size, position)
 end
 
 -- Основной класс библиотеки
-function ExecutorUILibrary.new(parentScreenGui)
-    local self = setmetatable({}, ExecutorUILibrary)
+function DragWindowUILibrary.new(windowConfig)
+    local self = setmetatable({}, DragWindowUILibrary)
     
-    self._screenGui = parentScreenGui or Instance.new("ScreenGui")
-    if not parentScreenGui then
-        self._screenGui.Name = "ExecutorUILibrary"
-        local player = game:GetService("Players").LocalPlayer
-        if player then
-            local playerGui = player:WaitForChild("PlayerGui")
-            self._screenGui.Parent = playerGui
-        else
-            self._screenGui.Parent = game:GetService("StarterGui")
-        end
+    windowConfig = windowConfig or {}
+    
+    -- Создаем ScreenGui
+    self._screenGui = Instance.new("ScreenGui")
+    self._screenGui.Name = "DragWindowUILibrary"
+    self._screenGui.ResetOnSpawn = false
+    self._screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local player = game:GetService("Players").LocalPlayer
+    if player then
+        local playerGui = player:WaitForChild("PlayerGui")
+        self._screenGui.Parent = playerGui
+    else
+        self._screenGui.Parent = game:GetService("StarterGui")
     end
     
-    self._elements = {}
-    self._executors = {}
-    self._themes = currentTheme
-    self._currentTheme = CONFIG.DEFAULT_THEME
+    -- Создаем основное окно
+    self._window = self:CreateWindow({
+        Title = windowConfig.Title or "UI Window",
+        Size = windowConfig.Size or UDim2.new(0, 400, 0, 500),
+        Position = windowConfig.Position or UDim2.new(0.5, -200, 0.5, -250),
+        Minimizable = windowConfig.Minimizable or true,
+        Closable = windowConfig.Closable or true
+    })
     
-    print("[ExecutorUILibrary] Библиотека инициализирована")
+    self._elements = {}
+    self._currentTheme = CONFIG.DEFAULT_THEME
+    self._themes = currentTheme
+    self._contentYOffset = CONFIG.WINDOW_HEADER_HEIGHT + CONFIG.ELEMENT_SPACING
+    
+    print("[DragWindowUILibrary] Библиотека инициализирована")
     return self
 end
 
--- Создание кнопки
-function ExecutorUILibrary:CreateButton(config)
+-- Создание перетаскиваемого окна
+function DragWindowUILibrary:CreateWindow(config)
     config = config or {}
     
-    local buttonFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 120, 0, 40), config.Position or UDim2.new(0, 20, 0, 20))
+    local windowFrame = createRoundedFrame(self._screenGui, config.Size, config.Position, self._themes[self._currentTheme].WindowBackground)
+    windowFrame.Name = "WindowFrame"
+    
+    -- Добавляем возможность перетаскивания
+    local header = createRoundedFrame(windowFrame, UDim2.new(1, 0, 0, CONFIG.WINDOW_HEADER_HEIGHT), UDim2.new(0, 0, 0, 0), self._themes[self._currentTheme].Header)
+    header.Name = "WindowHeader"
+    
+    -- Заголовок окна
+    local titleLabel = createTextLabel(header, config.Title, UDim2.new(1, -80, 1, 0), UDim2.new(0, 10, 0, 0), {
+        TextSize = 16,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left
+    })
+    
+    -- Контейнер для контента
+    local contentFrame = Instance.new("ScrollingFrame")
+    contentFrame.Name = "ContentFrame"
+    contentFrame.Size = UDim2.new(1, -20, 1, -CONFIG.WINDOW_HEADER_HEIGHT - CONFIG.ELEMENT_SPACING)
+    contentFrame.Position = UDim2.new(0, 10, 0, CONFIG.WINDOW_HEADER_HEIGHT + 5)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.ScrollBarThickness = 6
+    contentFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    contentFrame.ScrollBarImageColor3 = self._themes[self._currentTheme].Secondary
+    
+    local contentLayout = Instance.new("UIListLayout")
+    contentLayout.Padding = UDim.new(0, CONFIG.ELEMENT_SPACING)
+    contentLayout.Parent = contentFrame
+    
+    contentFrame.Parent = windowFrame
+    
+    -- Кнопка закрытия
+    if config.Closable then
+        local closeButton = Instance.new("TextButton")
+        closeButton.Size = UDim2.new(0, 30, 0, 30)
+        closeButton.Position = UDim2.new(1, -35, 0.5, -15)
+        closeButton.Text = "×"
+        closeButton.TextColor3 = self._themes[self._currentTheme].Text
+        closeButton.BackgroundColor3 = self._themes[self._currentTheme].CloseButton
+        closeButton.TextSize = 20
+        closeButton.Font = Enum.Font.GothamBold
+        
+        local closeCorner = Instance.new("UICorner")
+        closeCorner.CornerRadius = UDim.new(1, 0)
+        closeCorner.Parent = closeButton
+        
+        closeButton.Parent = header
+        
+        -- Анимация наведения для кнопки закрытия
+        if CONFIG.ANIMATIONS_ENABLED then
+            closeButton.MouseEnter:Connect(function()
+                game:GetService("TweenService"):Create(closeButton, TweenInfo.new(0.2), {
+                    BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+                }):Play()
+            end)
+            
+            closeButton.MouseLeave:Connect(function()
+                game:GetService("TweenService"):Create(closeButton, TweenInfo.new(0.2), {
+                    BackgroundColor3 = self._themes[self._currentTheme].CloseButton
+                }):Play()
+            end)
+        end
+        
+        closeButton.MouseButton1Click:Connect(function()
+            self:Destroy()
+        end)
+    end
+    
+    -- Функционал перетаскивания окна
+    local dragging = false
+    local dragStart
+    local startPos
+    
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = windowFrame.Position
+            
+            if CONFIG.ANIMATIONS_ENABLED then
+                game:GetService("TweenService"):Create(header, TweenInfo.new(0.1), {
+                    BackgroundTransparency = 0.3
+                }):Play()
+            end
+        end
+    end)
+    
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            
+            if CONFIG.ANIMATIONS_ENABLED then
+                game:GetService("TweenService"):Create(header, TweenInfo.new(0.1), {
+                    BackgroundTransparency = 0
+                }):Play()
+            end
+        end
+    end)
+    
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            windowFrame.Position = UDim2.new(
+                startPos.X.Scale, 
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale, 
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    -- Сохраняем ссылки на элементы окна
+    self._windowFrame = windowFrame
+    self._contentFrame = contentFrame
+    self._windowHeader = header
+    
+    return {
+        Frame = windowFrame,
+        Content = contentFrame,
+        Header = header,
+        SetTitle = function(newTitle)
+            titleLabel.Text = newTitle
+        end
+    }
+end
+
+-- Вспомогательная функция для добавления элемента в окно
+function DragWindowUILibrary:_addElementToContent(elementFrame, config)
+    elementFrame.Parent = self._contentFrame
+    
+    local elementName = config.Name or "Element_" .. tostring(#self._elements + 1)
+    self._elements[elementName] = {
+        Frame = elementFrame,
+        Config = config
+    }
+    
+    return elementName
+end
+
+-- Создание кнопки
+function DragWindowUILibrary:CreateButton(config)
+    config = config or {}
+    
+    local buttonFrame = createRoundedFrame(nil, config.Size or UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), self._themes[self._currentTheme].Primary)
     
     local buttonText = Instance.new("TextButton")
     buttonText.Size = UDim2.new(1, 0, 1, 0)
@@ -131,17 +292,7 @@ function ExecutorUILibrary:CreateButton(config)
         end)
     end
     
-    buttonFrame.BackgroundColor3 = self._themes[self._currentTheme].Primary
-    
-    local button = {
-        _frame = buttonFrame,
-        _text = buttonText,
-        Click = Instance.new("BindableEvent")
-    }
-    
     buttonText.MouseButton1Click:Connect(function()
-        button.Click:Fire()
-        
         if config.OnClick then
             local success, err = pcall(config.OnClick)
             if not success then
@@ -150,19 +301,30 @@ function ExecutorUILibrary:CreateButton(config)
         end
     end)
     
-    local elementName = config.Name or "Button_" .. tostring(#self._elements + 1)
-    self._elements[elementName] = button
+    local elementName = self:_addElementToContent(buttonFrame, config)
     
-    return button
+    return {
+        Name = elementName,
+        Frame = buttonFrame,
+        SetText = function(newText)
+            buttonText.Text = newText
+        end,
+        SetEnabled = function(enabled)
+            buttonText.Active = enabled
+            buttonText.TextTransparency = enabled and 0 or 0.5
+        end
+    }
 end
 
 -- Создание переключателя
-function ExecutorUILibrary:CreateToggle(config)
+function DragWindowUILibrary:CreateToggle(config)
     config = config or {}
     
-    local toggleFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 200, 0, 40), config.Position or UDim2.new(0, 20, 0, 80))
+    local toggleFrame = createRoundedFrame(nil, config.Size or UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), self._themes[self._currentTheme].Secondary)
     
-    local toggleText = createTextLabel(toggleFrame, config.Text or "Toggle", UDim2.new(0.7, 0, 1, 0), UDim2.new(0, 10, 0, 0))
+    local toggleText = createTextLabel(toggleFrame, config.Text or "Toggle", UDim2.new(0.7, 0, 1, 0), UDim2.new(0, 10, 0, 0), {
+        TextYAlignment = Enum.TextYAlignment.Center
+    })
     
     local toggleButton = Instance.new("TextButton")
     toggleButton.Size = UDim2.new(0, 50, 0, 24)
@@ -217,29 +379,28 @@ function ExecutorUILibrary:CreateToggle(config)
         end
     end)
     
-    local toggle = {
-        _frame = toggleFrame,
-        _button = toggleButton,
+    local elementName = self:_addElementToContent(toggleFrame, config)
+    
+    return {
+        Name = elementName,
+        Frame = toggleFrame,
         GetState = function() return state end,
         SetState = function(newState)
             state = newState
             updateToggle()
         end
     }
-    
-    local elementName = config.Name or "Toggle_" .. tostring(#self._elements + 1)
-    self._elements[elementName] = toggle
-    
-    return toggle
 end
 
 -- Создание слайдера
-function ExecutorUILibrary:CreateSlider(config)
+function DragWindowUILibrary:CreateSlider(config)
     config = config or {}
     
-    local sliderFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 250, 0, 60), config.Position or UDim2.new(0, 20, 0, 140))
+    local sliderFrame = createRoundedFrame(nil, config.Size or UDim2.new(1, 0, 0, 60), UDim2.new(0, 0, 0, 0), self._themes[self._currentTheme].Secondary)
     
-    local sliderText = createTextLabel(sliderFrame, config.Text or "Slider: 50%", UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 5))
+    local sliderText = createTextLabel(sliderFrame, config.Text or "Slider: 50%", UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 5), {
+        TextYAlignment = Enum.TextYAlignment.Top
+    })
     
     local sliderTrack = Instance.new("Frame")
     sliderTrack.Size = UDim2.new(1, -20, 0, 10)
@@ -319,8 +480,11 @@ function ExecutorUILibrary:CreateSlider(config)
         end
     end)
     
-    local slider = {
-        _frame = sliderFrame,
+    local elementName = self:_addElementToContent(sliderFrame, config)
+    
+    return {
+        Name = elementName,
+        Frame = sliderFrame,
         GetValue = function() return value end,
         SetValue = function(newValue)
             value = math.clamp(newValue, min, max)
@@ -328,18 +492,13 @@ function ExecutorUILibrary:CreateSlider(config)
             sliderText.Text = string.format("%s: %d/%d", config.Text or "Slider", value, max)
         end
     }
-    
-    local elementName = config.Name or "Slider_" .. tostring(#self._elements + 1)
-    self._elements[elementName] = slider
-    
-    return slider
 end
 
 -- Создание выпадающего списка
-function ExecutorUILibrary:CreateDropdown(config)
+function DragWindowUILibrary:CreateDropdown(config)
     config = config or {}
     
-    local dropdownFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 200, 0, 40), config.Position or UDim2.new(0, 20, 0, 220))
+    local dropdownFrame = createRoundedFrame(nil, config.Size or UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), self._themes[self._currentTheme].Secondary)
     
     local dropdownButton = Instance.new("TextButton")
     dropdownButton.Size = UDim2.new(1, 0, 1, 0)
@@ -366,6 +525,7 @@ function ExecutorUILibrary:CreateDropdown(config)
     optionsFrame.BackgroundColor3 = self._themes[self._currentTheme].Secondary
     optionsFrame.Visible = false
     optionsFrame.ClipsDescendants = true
+    optionsFrame.ZIndex = 10
     
     local optionsCorner = Instance.new("UICorner")
     optionsCorner.CornerRadius = UDim.new(0, 8)
@@ -392,6 +552,7 @@ function ExecutorUILibrary:CreateDropdown(config)
             optionButton.TextSize = 14
             optionButton.Font = Enum.Font.Gotham
             optionButton.AutoButtonColor = false
+            optionButton.ZIndex = 11
             optionButton.Parent = optionsFrame
             
             optionButton.MouseEnter:Connect(function()
@@ -425,8 +586,31 @@ function ExecutorUILibrary:CreateDropdown(config)
         optionsFrame.Visible = not optionsFrame.Visible
     end)
     
-    local dropdown = {
-        _frame = dropdownFrame,
+    -- Закрытие при клике вне списка
+    local function closeDropdown()
+        optionsFrame.Visible = false
+    end
+    
+    dropdownFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mousePos = input.Position
+            local absolutePos = optionsFrame.AbsolutePosition
+            local absoluteSize = optionsFrame.AbsoluteSize
+            
+            if absolutePos and absoluteSize then
+                if mousePos.X < absolutePos.X or mousePos.X > absolutePos.X + absoluteSize.X or
+                   mousePos.Y < absolutePos.Y or mousePos.Y > absolutePos.Y + absoluteSize.Y then
+                    closeDropdown()
+                end
+            end
+        end
+    end)
+    
+    local elementName = self:_addElementToContent(dropdownFrame, config)
+    
+    return {
+        Name = elementName,
+        Frame = dropdownFrame,
         GetSelected = function() return selected end,
         SetOptions = function(newOptions)
             if type(newOptions) == "table" then
@@ -437,305 +621,207 @@ function ExecutorUILibrary:CreateDropdown(config)
             end
         end
     }
-    
-    local elementName = config.Name or "Dropdown_" .. tostring(#self._elements + 1)
-    self._elements[elementName] = dropdown
-    
-    return dropdown
 end
 
--- Создание консоли для вывода
-function ExecutorUILibrary:CreateConsole(config)
+-- Создание текстового поля
+function DragWindowUILibrary:CreateTextBox(config)
     config = config or {}
     
-    local consoleFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 400, 0, 300), config.Position or UDim2.new(0.5, -200, 0.5, -150))
+    local textBoxFrame = createRoundedFrame(nil, config.Size or UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), self._themes[self._currentTheme].Secondary)
     
-    local consoleHeader = createTextLabel(consoleFrame, config.Title or "Console", UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 0, 5))
-    consoleHeader.TextSize = 16
-    consoleHeader.Font = Enum.Font.GothamBold
+    local textBox = Instance.new("TextBox")
+    textBox.Size = UDim2.new(1, -20, 1, 0)
+    textBox.Position = UDim2.new(0, 10, 0, 0)
+    textBox.Text = config.Default or ""
+    textBox.TextColor3 = self._themes[self._currentTheme].Text
+    textBox.BackgroundTransparency = 1
+    textBox.TextSize = 14
+    textBox.Font = Enum.Font.Gotham
+    textBox.PlaceholderText = config.Placeholder or "Enter text..."
+    textBox.ClearTextOnFocus = config.ClearOnFocus or false
+    textBox.TextXAlignment = Enum.TextXAlignment.Left
+    textBox.Parent = textBoxFrame
     
-    local consoleOutput = Instance.new("ScrollingFrame")
-    consoleOutput.Size = UDim2.new(1, -20, 1, -70)
-    consoleOutput.Position = UDim2.new(0, 10, 0, 40)
-    consoleOutput.BackgroundTransparency = 1
-    consoleOutput.ScrollBarThickness = 6
-    consoleOutput.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    
-    local outputList = Instance.new("UIListLayout")
-    outputList.Parent = consoleOutput
-    
-    consoleOutput.Parent = consoleFrame
-    
-    local inputFrame = createRoundedFrame(consoleFrame, UDim2.new(1, -20, 0, 30), UDim2.new(0, 10, 1, -35))
-    inputFrame.BackgroundColor3 = self._themes[self._currentTheme].Secondary
-    
-    local inputBox = Instance.new("TextBox")
-    inputBox.Size = UDim2.new(1, -10, 1, 0)
-    inputBox.Position = UDim2.new(0, 5, 0, 0)
-    inputBox.Text = ""
-    inputBox.TextColor3 = self._themes[self._currentTheme].Text
-    inputBox.BackgroundTransparency = 1
-    inputBox.TextSize = 14
-    inputBox.Font = Enum.Font.Gotham
-    inputBox.PlaceholderText = "Type command here..."
-    inputBox.Parent = inputFrame
-    
-    local function addMessage(message, messageType)
-        if not message then return end
-        
-        local messageLabel = Instance.new("TextLabel")
-        messageLabel.Size = UDim2.new(1, 0, 0, 20)
-        messageLabel.Text = "> " .. tostring(message)
-        
-        if messageType == "error" then
-            messageLabel.TextColor3 = self._themes[self._currentTheme].Error
-        elseif messageType == "success" then
-            messageLabel.TextColor3 = self._themes[self._currentTheme].Success
-        elseif messageType == "warning" then
-            messageLabel.TextColor3 = self._themes[self._currentTheme].Warning
-        else
-            messageLabel.TextColor3 = self._themes[self._currentTheme].Text
-        end
-        
-        messageLabel.BackgroundTransparency = 1
-        messageLabel.TextSize = 12
-        messageLabel.Font = Enum.Font.Gotham
-        messageLabel.TextXAlignment = Enum.TextXAlignment.Left
-        messageLabel.TextYAlignment = Enum.TextYAlignment.Top
-        messageLabel.TextWrapped = true
-        
-        messageLabel.Parent = consoleOutput
-        
-        -- Автоскролл вниз
-        task.wait()
-        consoleOutput.CanvasPosition = Vector2.new(0, consoleOutput.CanvasPosition.Y + 100)
+    if config.MultiLine then
+        textBox.MultiLine = true
+        textBox.TextYAlignment = Enum.TextYAlignment.Top
+        textBoxFrame.Size = config.Size or UDim2.new(1, 0, 0, 80)
     end
     
-    inputBox.FocusLost:Connect(function(enterPressed)
-        if enterPressed and inputBox.Text ~= "" then
-            local command = inputBox.Text
-            inputBox.Text = ""
-            
-            addMessage(command, "input")
-            
-            if config.OnCommand then
-                local success, result = pcall(config.OnCommand, command)
-                if success then
-                    addMessage(result or "Command executed", "success")
-                else
-                    addMessage("Error: " .. tostring(result), "error")
-                end
+    textBox.FocusLost:Connect(function(enterPressed)
+        if config.OnTextChanged then
+            local success, err = pcall(config.OnTextChanged, textBox.Text, enterPressed)
+            if not success then
+                warn("[TextBox] Ошибка в обработчике OnTextChanged:", err)
             end
         end
     end)
     
-    local console = {
-        _frame = consoleFrame,
-        Log = function(message, messageType)
-            addMessage(message, messageType or "info")
-        end,
-        Clear = function()
-            consoleOutput:ClearAllChildren()
-            local listLayout = Instance.new("UIListLayout")
-            listLayout.Parent = consoleOutput
+    local elementName = self:_addElementToContent(textBoxFrame, config)
+    
+    return {
+        Name = elementName,
+        Frame = textBoxFrame,
+        GetText = function() return textBox.Text end,
+        SetText = function(newText)
+            textBox.Text = newText or ""
         end
     }
-    
-    local elementName = config.Name or "Console"
-    self._elements[elementName] = console
-    
-    return console
 end
 
--- Создание панели исполнителя
-function ExecutorUILibrary:CreateExecutorPanel(config)
+-- Создание метки (текста)
+function DragWindowUILibrary:CreateLabel(config)
     config = config or {}
     
-    local panelFrame = createRoundedFrame(self._screenGui, config.Size or UDim2.new(0, 500, 0, 400), config.Position or UDim2.new(0.5, -250, 0.5, -200))
+    local labelFrame = createRoundedFrame(nil, config.Size or UDim2.new(1, 0, 0, 30), UDim2.new(0, 0, 0, 0))
+    labelFrame.BackgroundTransparency = 1
     
-    local header = createTextLabel(panelFrame, config.Title or "Executor Panel", UDim2.new(1, -20, 0, 40), UDim2.new(0, 10, 0, 5))
-    header.TextSize = 20
-    header.Font = Enum.Font.GothamBold
+    local label = createTextLabel(labelFrame, config.Text or "Label", UDim2.new(1, -20, 1, 0), UDim2.new(0, 10, 0, 0), {
+        TextSize = config.TextSize or 14,
+        Font = config.Font or Enum.Font.Gotham,
+        TextYAlignment = Enum.TextYAlignment.Center
+    })
     
-    local scriptInput = Instance.new("TextBox")
-    scriptInput.Size = UDim2.new(1, -20, 0.6, -50)
-    scriptInput.Position = UDim2.new(0, 10, 0, 50)
-    scriptInput.Text = config.DefaultScript or "-- Enter your script here"
-    scriptInput.TextColor3 = self._themes[self._currentTheme].Text
-    scriptInput.BackgroundColor3 = self._themes[self._currentTheme].Secondary
-    scriptInput.TextSize = 12
-    scriptInput.Font = Enum.Font.Code
-    scriptInput.TextXAlignment = Enum.TextXAlignment.Left
-    scriptInput.TextYAlignment = Enum.TextYAlignment.Top
-    scriptInput.TextWrapped = true
-    scriptInput.ClearTextOnFocus = false
-    scriptInput.MultiLine = true
-    
-    local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 6)
-    inputCorner.Parent = scriptInput
-    
-    scriptInput.Parent = panelFrame
-    
-    local buttonContainer = Instance.new("Frame")
-    buttonContainer.Size = UDim2.new(1, -20, 0, 40)
-    buttonContainer.Position = UDim2.new(0, 10, 0.65, 10)
-    buttonContainer.BackgroundTransparency = 1
-    
-    local executeButton = Instance.new("TextButton")
-    executeButton.Size = UDim2.new(0, 120, 1, 0)
-    executeButton.Position = UDim2.new(0, 0, 0, 0)
-    executeButton.Text = "Execute"
-    executeButton.TextColor3 = self._themes[self._currentTheme].Text
-    executeButton.BackgroundColor3 = self._themes[self._currentTheme].Success
-    executeButton.TextSize = 14
-    executeButton.Font = Enum.Font.GothamBold
-    
-    local executeCorner = Instance.new("UICorner")
-    executeCorner.CornerRadius = UDim.new(0, 6)
-    executeCorner.Parent = executeButton
-    
-    executeButton.Parent = buttonContainer
-    
-    local clearButton = Instance.new("TextButton")
-    clearButton.Size = UDim2.new(0, 120, 1, 0)
-    clearButton.Position = UDim2.new(0, 130, 0, 0)
-    clearButton.Text = "Clear"
-    clearButton.TextColor3 = self._themes[self._currentTheme].Text
-    clearButton.BackgroundColor3 = self._themes[self._currentTheme].Warning
-    clearButton.TextSize = 14
-    clearButton.Font = Enum.Font.GothamBold
-    
-    local clearCorner = Instance.new("UICorner")
-    clearCorner.CornerRadius = UDim.new(0, 6)
-    clearCorner.Parent = clearButton
-    
-    clearButton.Parent = buttonContainer
-    
-    buttonContainer.Parent = panelFrame
-    
-    local outputFrame = Instance.new("ScrollingFrame")
-    outputFrame.Size = UDim2.new(1, -20, 0.3, -10)
-    outputFrame.Position = UDim2.new(0, 10, 0.75, 0)
-    outputFrame.BackgroundColor3 = self._themes[self._currentTheme].Secondary
-    outputFrame.ScrollBarThickness = 6
-    
-    local outputCorner = Instance.new("UICorner")
-    outputCorner.CornerRadius = UDim.new(0, 6)
-    outputCorner.Parent = outputFrame
-    
-    local outputText = Instance.new("TextLabel")
-    outputText.Size = UDim2.new(1, -10, 0, 100)
-    outputText.Position = UDim2.new(0, 5, 0, 5)
-    outputText.Text = "Output will appear here..."
-    outputText.TextColor3 = self._themes[self._currentTheme].Text
-    outputText.BackgroundTransparency = 1
-    outputText.TextSize = 12
-    outputText.Font = Enum.Font.Code
-    outputText.TextXAlignment = Enum.TextXAlignment.Left
-    outputText.TextYAlignment = Enum.TextYAlignment.Top
-    outputText.TextWrapped = true
-    outputText.Parent = outputFrame
-    
-    outputFrame.Parent = panelFrame
-    
-    local function executeScript()
-        local script = scriptInput.Text
-        outputText.Text = "Executing..."
-        
-        -- Безопасное выполнение
-        local success, result = pcall(function()
-            -- В реальном скрипте исполнителя здесь будет loadstring
-            -- Пример для Roblox:
-            -- local func, err = loadstring(script)
-            -- if func then
-            --     return func()
-            -- else
-            --     error(err)
-            -- end
-            
-            -- Для демонстрации просто возвращаем сообщение
-            return "Script executed (simulated mode)"
-        end)
-        
-        if success then
-            outputText.Text = "Success: " .. tostring(result)
-        else
-            outputText.Text = "Error: " .. tostring(result)
-        end
+    if config.Center then
+        label.TextXAlignment = Enum.TextXAlignment.Center
     end
     
-    executeButton.MouseButton1Click:Connect(executeScript)
+    local elementName = self:_addElementToContent(labelFrame, config)
     
-    clearButton.MouseButton1Click:Connect(function()
-        scriptInput.Text = ""
-        outputText.Text = "Output cleared"
-    end)
-    
-    local panel = {
-        _frame = panelFrame,
-        ExecuteScript = executeScript,
-        GetScript = function() return scriptInput.Text end,
-        SetScript = function(script) 
-            if type(script) == "string" then
-                scriptInput.Text = script 
-            end
+    return {
+        Name = elementName,
+        Frame = labelFrame,
+        SetText = function(newText)
+            label.Text = newText
         end
     }
+end
+
+-- Создание разделителя
+function DragWindowUILibrary:CreateSeparator(config)
+    config = config or {}
     
-    local elementName = config.Name or "ExecutorPanel"
-    self._elements[elementName] = panel
-    self._executors[elementName] = panel
+    local separatorFrame = Instance.new("Frame")
+    separatorFrame.Size = config.Size or UDim2.new(1, 0, 0, 1)
+    separatorFrame.BackgroundColor3 = self._themes[self._currentTheme].Secondary
+    separatorFrame.BorderSizePixel = 0
     
-    return panel
+    local elementName = self:_addElementToContent(separatorFrame, config)
+    
+    return {
+        Name = elementName,
+        Frame = separatorFrame
+    }
 end
 
 -- Изменение темы
-function ExecutorUILibrary:SetTheme(themeName)
+function DragWindowUILibrary:SetTheme(themeName)
     if self._themes[themeName] then
         self._currentTheme = themeName
-        print("[ExecutorUILibrary] Тема изменена на: " .. themeName)
+        
+        -- Обновляем цвета окна
+        if self._windowFrame then
+            self._windowFrame.BackgroundColor3 = self._themes[themeName].WindowBackground
+        end
+        
+        if self._windowHeader then
+            self._windowHeader.BackgroundColor3 = self._themes[themeName].Header
+        end
+        
+        print("[DragWindowUILibrary] Тема изменена на: " .. themeName)
     else
-        warn("[ExecutorUILibrary] Тема не найдена: " .. tostring(themeName))
+        warn("[DragWindowUILibrary] Тема не найдена: " .. tostring(themeName))
     end
 end
 
--- Показать/скрыть все элементы
-function ExecutorUILibrary:ToggleVisibility(visible)
+-- Показать/скрыть окно
+function DragWindowUILibrary:SetVisible(visible)
     if self._screenGui then
         self._screenGui.Enabled = visible
     end
 end
 
--- Очистить все элементы
-function ExecutorUILibrary:Clear()
-    for _, element in pairs(self._elements) do
-        if element and element._frame then
-            element._frame:Destroy()
+-- Переместить окно
+function DragWindowUILibrary:SetPosition(position)
+    if self._windowFrame and position then
+        self._windowFrame.Position = position
+    end
+end
+
+-- Изменить размер окна
+function DragWindowUILibrary:SetSize(size)
+    if self._windowFrame and size then
+        self._windowFrame.Size = size
+        if self._contentFrame then
+            self._contentFrame.Size = UDim2.new(1, -20, 1, -CONFIG.WINDOW_HEADER_HEIGHT - CONFIG.ELEMENT_SPACING)
         end
     end
-    self._elements = {}
-    self._executors = {}
+end
+
+-- Изменить заголовок окна
+function DragWindowUILibrary:SetTitle(title)
+    if self._window and title then
+        self._window.SetTitle(title)
+    end
+end
+
+-- Очистить все элементы
+function DragWindowUILibrary:ClearContent()
+    if self._contentFrame then
+        self._contentFrame:ClearAllChildren()
+        
+        -- Восстанавливаем UIListLayout
+        local contentLayout = Instance.new("UIListLayout")
+        contentLayout.Padding = UDim.new(0, CONFIG.ELEMENT_SPACING)
+        contentLayout.Parent = self._contentFrame
+        
+        self._elements = {}
+    end
+end
+
+-- Получить элемент по имени
+function DragWindowUILibrary:GetElement(elementName)
+    return self._elements[elementName]
+end
+
+-- Удалить элемент по имени
+function DragWindowUILibrary:RemoveElement(elementName)
+    local element = self._elements[elementName]
+    if element and element.Frame then
+        element.Frame:Destroy()
+        self._elements[elementName] = nil
+    end
 end
 
 -- Получить информацию о библиотеке
-function ExecutorUILibrary:GetInfo()
+function DragWindowUILibrary:GetInfo()
     local elementsCount = 0
     for _ in pairs(self._elements) do
         elementsCount = elementsCount + 1
     end
     
-    local executorsCount = 0
-    for _ in pairs(self._executors) do
-        executorsCount = executorsCount + 1
-    end
-    
     return {
-        Version = "1.1.0",
+        Version = "1.2.0",
         ElementsCount = elementsCount,
-        ExecutorsCount = executorsCount,
-        CurrentTheme = self._currentTheme
+        CurrentTheme = self._currentTheme,
+        WindowVisible = self._screenGui and self._screenGui.Enabled or false
     }
 end
 
-return ExecutorUILibrary
+-- Уничтожить окно и все элементы
+function DragWindowUILibrary:Destroy()
+    if self._screenGui then
+        self._screenGui:Destroy()
+    end
+    self._elements = {}
+    print("[DragWindowUILibrary] Окно уничтожено")
+end
+
+-- Переключить видимость окна
+function DragWindowUILibrary:ToggleVisibility()
+    if self._screenGui then
+        self._screenGui.Enabled = not self._screenGui.Enabled
+    end
+end
+
+return DragWindowUILibrary
